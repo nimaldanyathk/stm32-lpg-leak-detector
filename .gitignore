@@ -1,0 +1,28 @@
+# Keil MDK build output
+Objects/
+Listings/
+*.uvguix.*
+*.uvoptx
+*.bak
+*.dep
+*.lst
+*.map
+*.axf
+*.htm
+*.o
+*.d
+*.crf
+*.sct
+EventRecorderStub.scvd
+JLinkLog.txt
+RTE/_*/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Recorded sensor logs (keep them out of git unless you mean to share them)
+ml/logs/*.txt
+ml/logs/*.csv
+!ml/logs/README.txt

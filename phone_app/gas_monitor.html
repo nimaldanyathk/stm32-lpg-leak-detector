@@ -1,0 +1,794 @@
+<!doctype html>
+<!-- Gas Leak Monitor, phone/laptop dashboard for the STM32 LPG detector.
+     Copyright (c) 2026 Nimal Danyath K (nimaldanyathk). All rights reserved. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#14181b">
+<title>Gas Leak Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one instrument column, status first, controls last. Industrial
+   panel look: hazard-amber accent, condensed display type, mono readouts. */
+:root {
+  --bg: #eef1f0;
+  --panel: #ffffff;
+  --panel-2: #e4e9e7;
+  --ink: #15191c;
+  --ink-2: #5a6469;
+  --line: #cfd6d3;
+  --accent: #e3a018;
+  --accent-ink: #1c1606;
+  --safe: #17895a;
+  --danger: #cf2338;
+  --warn: #c9800b;
+  --idle: #7a868b;
+  --safe-bg: #17895a; --danger-bg: #c8202f; --warn-bg: #a8650a; --idle-bg: #5f6c72;
+  --chart-a: #cf2338;
+  --chart-b: #2b74b8;
+  --font-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101315; --panel: #181d20; --panel-2: #222a2e; --ink: #e6ecee; --ink-2: #93a0a6;
+    --line: #2c363b; --accent: #f0b23a; --accent-ink: #1c1606; --safe: #36c487;
+    --danger: #ff4d61; --warn: #f0a52c; --idle: #78858b; --chart-a: #ff5c6e; --chart-b: #5fa8ec;
+    --safe-bg: #18714a; --danger-bg: #b51d2e; --warn-bg: #95590a; --idle-bg: #3f494e;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101315; --panel: #181d20; --panel-2: #222a2e; --ink: #e6ecee; --ink-2: #93a0a6;
+  --line: #2c363b; --accent: #f0b23a; --accent-ink: #1c1606; --safe: #36c487;
+  --danger: #ff4d61; --warn: #f0a52c; --idle: #78858b; --chart-a: #ff5c6e; --chart-b: #5fa8ec;
+  --safe-bg: #18714a; --danger-bg: #b51d2e; --warn-bg: #95590a; --idle-bg: #3f494e;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.45 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 calc(24px + env(safe-area-inset-bottom, 0px));
+}
+[hidden] { display: none !important; }
+.wrap { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+/* top bar */
+.bar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--bg);
+  display: flex; align-items: center; gap: 10px;
+  padding-block: 12px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.hazard {
+  width: 26px; height: 26px; flex: none; border-radius: 4px;
+  background: repeating-linear-gradient(-45deg, var(--accent) 0 5px, var(--ink) 5px 10px);
+}
+.brand h1 {
+  font: 700 22px/1 var(--font-display); letter-spacing: .02em; margin: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pill {
+  font: 500 12px/1 var(--font-mono); text-transform: uppercase; letter-spacing: .06em;
+  padding: 6px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-2);
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+.pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--idle); display: block; }
+.pill.on i { background: var(--safe); }
+.pill.demo i { background: var(--accent); }
+
+button {
+  font: 600 14px/1 var(--font-body); color: var(--ink); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; cursor: pointer;
+  min-height: 44px;
+}
+button:hover { border-color: var(--ink-2); }
+button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.danger { color: var(--danger); }
+button.armed { background: var(--danger); color: #fff; border-color: var(--danger); }
+
+/* status hero */
+.status {
+  border-radius: 12px; padding: 18px 18px 16px; color: #fff;
+  background: var(--idle-bg); display: grid; gap: 6px; position: relative; overflow: hidden;
+}
+.status.safe { background: var(--safe-bg); }
+.status.alarm { background: var(--danger-bg); animation: flash 1s steps(2, start) infinite; }
+.status.fault { background: var(--warn-bg); }
+@keyframes flash { 50% { filter: brightness(.72); } }
+@media (prefers-reduced-motion: reduce) { .status.alarm { animation: none; } }
+.status .label { font: 500 12px/1 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; opacity: .85; }
+.status .big { font: 700 clamp(44px, 14vw, 64px)/0.95 var(--font-display); letter-spacing: .01em; text-wrap: balance; }
+.status .sub { font: 500 15px/1.3 var(--font-body); }
+.status .meta { font: 400 12px/1.3 var(--font-mono); opacity: .85; }
+.status .mute {
+  position: absolute; right: 12px; top: 12px; background: rgba(0,0,0,.25); color: #fff;
+  border: 0; min-height: 36px; padding: 8px 10px; font-size: 13px;
+}
+
+/* panels */
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: grid; gap: 12px; }
+.panel h2 {
+  margin: 0; font: 700 18px/1 var(--font-display); letter-spacing: .04em; text-transform: uppercase;
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+}
+.panel h2 small { font: 400 11px/1 var(--font-mono); color: var(--ink-2); letter-spacing: .04em; text-transform: none; }
+
+/* gas meters */
+.meters { display: grid; gap: 12px; }
+.meter { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: baseline; }
+.meter .name { font: 600 14px/1.2 var(--font-body); }
+.meter .name span { font: 400 12px/1 var(--font-mono); color: var(--ink-2); margin-left: 6px; }
+.meter .val { font: 500 18px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.track { grid-column: 1 / -1; height: 12px; border-radius: 6px; background: var(--panel-2); position: relative; overflow: hidden; }
+.track b { position: absolute; inset: 0 auto 0 0; width: 0%; background: var(--safe); border-radius: 6px; transition: width .35s ease; }
+.track b.mid { background: var(--warn); }
+.track b.high { background: var(--danger); }
+.meter .ratio { grid-column: 1 / -1; font: 400 12px/1 var(--font-mono); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+/* climate */
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.tile { background: var(--panel-2); border-radius: 10px; padding: 10px; display: grid; gap: 4px; min-width: 0; }
+.tile .k { font: 500 11px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+.tile .v { font: 700 28px/1 var(--font-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tile .v small { font: 500 14px/1 var(--font-body); color: var(--ink-2); margin-left: 2px; }
+
+/* chart */
+.chart-box { position: relative; width: 100%; aspect-ratio: 2.2 / 1; max-width: 100%; }
+canvas { width: 100%; height: 100%; display: block; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font: 400 12px/1 var(--font-mono); color: var(--ink-2); }
+.legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+
+/* controls */
+.grid-btn { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.labels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.labels button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.row > * { flex: 1 1 auto; }
+.stat { font: 400 13px/1.4 var(--font-mono); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.note { font-size: 13px; color: var(--ink-2); margin: 0; }
+.note b { color: var(--ink); }
+
+/* console */
+.console {
+  font: 400 12px/1.5 var(--font-mono); background: var(--panel-2); border-radius: 8px;
+  padding: 10px; height: 180px; overflow: auto; white-space: pre-wrap; word-break: break-all;
+}
+.console .msg { color: var(--accent); }
+.console .alarm { color: var(--danger); font-weight: 500; }
+.console .data { color: var(--ink-2); }
+
+.banner {
+  border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px;
+  padding: 10px 12px; font-size: 13px; background: var(--panel);
+}
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  background: var(--ink); color: var(--bg); padding: 10px 14px; border-radius: 8px;
+  font: 500 14px/1.3 var(--font-body); max-width: calc(100% - 32px); z-index: 10;
+}
+details summary { cursor: pointer; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="bar">
+    <div class="brand"><div class="hazard" aria-hidden="true"></div><h1>Gas Leak Monitor</h1></div>
+    <span class="pill" id="conn"><i></i><span id="connText">Offline</span></span>
+  </header>
+
+  <div class="banner" id="support" hidden></div>
+
+  <div class="row">
+    <button class="primary" id="btnConnect">Connect HC-05</button>
+    <button id="btnDemo">Demo</button>
+  </div>
+
+  <section class="status" id="status" aria-live="polite">
+    <span class="label" id="stLabel">Detector</span>
+    <span class="big" id="stBig">NOT CONNECTED</span>
+    <span class="sub" id="stSub">Tap Connect, or Demo to see sample data.</span>
+    <span class="meta" id="stMeta">No data yet</span>
+    <button class="mute" id="btnMute" hidden>Mute 60 s</button>
+  </section>
+
+  <section class="panel" aria-labelledby="hGas">
+    <h2 id="hGas">Gas sensors <small>100% = fail-safe level</small></h2>
+    <div class="meters">
+      <div class="meter">
+        <span class="name">MQ-6 <span>LPG</span></span><span class="val" id="v6">--</span>
+        <div class="track"><b id="t6"></b></div>
+        <span class="ratio" id="r6">Rs/R0 --</span>
+      </div>
+      <div class="meter">
+        <span class="name">MQ-2 <span>smoke</span></span><span class="val" id="v2">--</span>
+        <div class="track"><b id="t2"></b></div>
+        <span class="ratio" id="r2">Rs/R0 --</span>
+      </div>
+      <div class="meter">
+        <span class="name">MQ-135 <span>air quality</span></span><span class="val" id="v135">--</span>
+        <div class="track"><b id="t135"></b></div>
+        <span class="ratio" id="r135">Rs/R0 --</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="hClim">
+    <h2 id="hClim">Climate <small>AHT20</small></h2>
+    <div class="tiles">
+      <div class="tile"><span class="k">Temp</span><span class="v" id="vT">--<small>°C</small></span></div>
+      <div class="tile"><span class="k">Humidity</span><span class="v" id="vH">--<small>%</small></span></div>
+      <div class="tile"><span class="k">RH rise</span><span class="v" id="vR">--<small>%</small></span></div>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="hTrend">
+    <h2 id="hTrend">Last 2 minutes</h2>
+    <div class="chart-box"><canvas id="chart" aria-label="Trend chart of LPG level and humidity"></canvas></div>
+    <div class="legend"><span><i style="background:var(--chart-a)"></i>MQ-6 LPG level %</span><span><i style="background:var(--chart-b)"></i>Humidity %RH</span></div>
+  </section>
+
+  <section class="panel" aria-labelledby="hCtl">
+    <h2 id="hCtl">Detector controls</h2>
+    <div class="grid-btn">
+      <button data-cmd="T" class="needs-link">Self test</button>
+      <button id="btnCal" class="needs-link">Calibrate</button>
+      <button data-cmd="N" class="needs-link">Next OLED page</button>
+      <button data-cmd="E" class="needs-link">Alarm history</button>
+    </div>
+    <p class="note">Calibrate only in <b>clean air</b>. It takes 10 seconds.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="hData">
+    <h2 id="hData">Record dataset <small>for train.py</small></h2>
+    <div class="row">
+      <button id="btnLog" class="needs-link">Start logging</button>
+      <button id="btnSave">Save log file</button>
+    </div>
+    <div class="labels" role="group" aria-label="Current label">
+      <button data-label="0" class="needs-link" aria-pressed="false">0 Clean</button>
+      <button data-label="1" class="needs-link" aria-pressed="false">1 LPG</button>
+      <button data-label="2" class="needs-link" aria-pressed="false">2 Smoke</button>
+      <button data-label="3" class="needs-link" aria-pressed="false">3 Steam</button>
+      <button data-label="4" class="needs-link" aria-pressed="false">4 VOC</button>
+      <button data-label="X" class="needs-link" aria-pressed="true">No label</button>
+    </div>
+    <span class="stat" id="logStat">Not logging. 0 rows recorded.</span>
+    <p class="note">Tap a label when the exposure starts, tap <b>No label</b> when it ends, wait for all three Rs/R0 to return above 0.90.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="hCon">
+    <h2 id="hCon">Device messages</h2>
+    <div class="console" id="console" role="log" aria-live="off"></div>
+    <div class="row">
+      <label class="stat"><input type="checkbox" id="showData"> Show data rows</label>
+      <label class="stat"><input type="checkbox" id="soundOn" checked> Alarm sound + vibration</label>
+    </div>
+  </section>
+
+  <details class="panel">
+    <summary>How to connect</summary>
+    <p class="note"><b>Android:</b> pair HC-05 in Bluetooth settings first (PIN 1234 or 0000), then open this page in Chrome 137 or newer and tap Connect HC-05.</p>
+    <p class="note"><b>Laptop:</b> pair HC-05 in Windows Bluetooth settings, open this file in Chrome or Edge, tap Connect HC-05 and pick the HC-05 COM port.</p>
+    <p class="note">iPhone and Safari cannot connect to the HC-05. Demo works everywhere.</p>
+  </details>
+  <p class="note" style="text-align:center">&copy; 2026 Nimal Danyath K (nimaldanyathk)</p>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- constants that mirror the firmware ---------- */
+  var SPP_UUID = "00001101-0000-1000-8000-00805f9b34fb";
+  var FAILSAFE_R6 = 0.40;                 /* gas index 100% at this Rs/R0 */
+  var VC = 5.0, VREF = 3.3, FULL = 4095, DIV = 2.0;
+  var TREND_SECONDS = 120;
+  var CLASS_SHORT = { "CLEAN AIR": "Clean air", "LPG": "LPG", "SMOKE": "Smoke", "STEAM": "Steam", "ALCOHOL/VOC": "Alcohol / VOC" };
+
+  /* ---------- state ---------- */
+  var port = null, reader = null, readClosed = null, keepReading = false;
+  var demoTimer = null;
+  var mode = "offline";                   /* offline | serial | demo */
+  var st = {
+    phase: "none",                        /* none | warmup | calib | run */
+    r: [null, null, null], rh: null, t: null, rhAvg: null,
+    cls: null, alarm: false, fault: false, failsafe: false,
+    muted: false, muteUntil: 0, lastData: 0, warmLeft: null,
+    base: null, logging: false, label: "X", rows: 0
+  };
+  var logLines = [];                      /* everything received, for saving */
+  var trend = [];                         /* {t, g6, rh} one per second      */
+  var lastTrendPush = 0;
+  var lineBuf = "";
+  var audioCtx = null, beepTimer = null;
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ---------- helpers ---------- */
+  function gasIndex(r) {
+    if (r == null || !isFinite(r)) return null;
+    var g = (1 - r) / (1 - FAILSAFE_R6) * 100;
+    return Math.max(0, Math.min(199, g));
+  }
+  function rsFromRaw(raw) {
+    var v = raw * (VREF / FULL) * DIV;
+    v = Math.min(Math.max(v, 0.01), VC - 0.01);
+    return (VC - v) / v;
+  }
+  function fmt(n, d) { return (n == null || !isFinite(n)) ? "--" : n.toFixed(d); }
+  function toast(msg) {
+    var t = $("toast"); t.textContent = msg; t.hidden = false;
+    clearTimeout(toast._h); toast._h = setTimeout(function () { t.hidden = true; }, 2500);
+  }
+
+  /* ---------- browser support ---------- */
+  function checkSupport() {
+    var b = $("support");
+    if (!("serial" in navigator)) {
+      b.hidden = false;
+      b.textContent = window.isSecureContext
+        ? "This browser cannot open Bluetooth serial ports. Use Chrome 137+ on Android, or Chrome / Edge on a laptop. Demo still works."
+        : "Bluetooth serial needs a secure page (https or a local file opened in Chrome). Demo still works.";
+      $("btnConnect").disabled = true;
+    }
+  }
+
+  /* ---------- connection pill and buttons ---------- */
+  function setMode(m) {
+    mode = m;
+    var pill = $("conn");
+    pill.className = "pill" + (m === "serial" ? " on" : m === "demo" ? " demo" : "");
+    $("connText").textContent = m === "serial" ? "Connected" : m === "demo" ? "Demo" : "Offline";
+    $("btnConnect").textContent = m === "serial" ? "Disconnect" : "Connect HC-05";
+    $("btnDemo").textContent = m === "demo" ? "Stop demo" : "Demo";
+    var live = m !== "offline";
+    Array.prototype.forEach.call(document.querySelectorAll(".needs-link"), function (b) { b.disabled = !live; });
+    render();
+  }
+
+  /* ---------- sending commands ---------- */
+  function send(ch) {
+    if (mode === "serial" && port && port.writable) {
+      var w = port.writable.getWriter();
+      w.write(new TextEncoder().encode(ch)).catch(function () {}).finally(function () { w.releaseLock(); });
+    } else if (mode === "demo") {
+      demoCommand(ch);
+    }
+  }
+
+  /* ---------- parsing device lines ---------- */
+  function feedText(chunk) {
+    lineBuf += chunk;
+    var parts = lineBuf.split(/\r?\n/);
+    lineBuf = parts.pop();
+    if (lineBuf.length > 512) lineBuf = "";
+    parts.forEach(function (l) { if (l.trim()) handleLine(l.trim()); });
+  }
+
+  function handleLine(line) {
+    logLines.push(line);
+    if (logLines.length > 300000) logLines.splice(0, 50000);
+    var p = line.split(",");
+    var now = Date.now();
+
+    if (p[0] === "S" && p.length >= 9) {
+      st.phase = "run";
+      st.r = [parseFloat(p[2]), parseFloat(p[3]), parseFloat(p[4])];
+      st.rh = p[5] === "-" ? null : parseFloat(p[5]);
+      st.t = p[6] === "-" ? null : parseFloat(p[6]);
+      st.cls = p[7];
+      st.alarm = p[8] === "ALARM";
+      st.fault = p[8] === "FAULT";
+      if (!st.alarm) st.failsafe = false;
+      st.lastData = now;
+      pushTrend(now);
+      logConsole(line, "data");
+    } else if (p[0] === "B" && p.length === 4) {
+      st.base = [+p[1], +p[2], +p[3]];
+      logConsole(line, "msg");
+    } else if (p[0] === "D" && p.length === 10) {
+      st.phase = "run";
+      st.rows++;
+      if (st.base) {
+        st.r = [0, 1, 2].map(function (i) { return rsFromRaw(+p[4 + i]) / rsFromRaw(st.base[i]); });
+      }
+      var rhc = +p[7], tc = +p[8], rhb = +p[9];
+      if (rhc || rhb) { st.rh = rhc / 100; st.t = tc / 100; st.rhAvg = rhb / 100; }
+      st.lastData = now;
+      pushTrend(now);
+      logConsole(line, "data");
+    } else if (line.charAt(0) === "#") {
+      var m = line.slice(1).trim();
+      var cls = "msg";
+      if (/^ALARM ON/.test(m))         { st.alarm = true; cls = "alarm"; alarmStart(); }
+      else if (/^ALARM CLEARED/.test(m)) { st.alarm = false; st.failsafe = false; st.muted = false; alarmStop(); }
+      else if (/^WARMING UP, (\d+)/.test(m)) { st.phase = "warmup"; st.warmLeft = +RegExp.$1; }
+      else if (/^CALIBRATING/.test(m))   { st.phase = "calib"; }
+      else if (/^CALIBRATION DONE/.test(m)) { st.phase = "run"; toast("Calibrated"); }
+      else if (/^BUZZER MUTED/.test(m))  { st.muted = true; st.muteUntil = now + 60000; }
+      else if (/^MUTE REFUSED/.test(m))  { st.failsafe = true; toast("Strong leak: buzzer cannot be muted"); }
+      else if (/^MUTE CANCELLED/.test(m)) { st.muted = false; st.failsafe = true; }
+      else if (/^SENSOR FAULT/.test(m))  { st.fault = true; cls = "alarm"; }
+      else if (/^LOG START/.test(m))     { st.logging = true; }
+      else if (/^LOG STOP/.test(m))      { st.logging = false; }
+      else if (/^LABEL (\d)/.test(m))    { st.label = RegExp.$1; }
+      else if (/^LABEL CLEARED/.test(m)) { st.label = "X"; }
+      logConsole(line, cls);
+    } else {
+      logConsole(line, "data");
+    }
+    render();
+  }
+
+  function pushTrend(now) {
+    if (now - lastTrendPush < 1000) return;
+    lastTrendPush = now;
+    trend.push({ t: now, g6: gasIndex(st.r[0]), rh: st.rh });
+    var cutoff = now - TREND_SECONDS * 1000;
+    while (trend.length && trend[0].t < cutoff) trend.shift();
+  }
+
+  /* ---------- console ---------- */
+  var consoleCount = 0;
+  function logConsole(text, cls) {
+    if (cls === "data" && !$("showData").checked) return;
+    var c = $("console");
+    var atBottom = c.scrollTop + c.clientHeight >= c.scrollHeight - 8;
+    var d = document.createElement("div");
+    d.className = cls; d.textContent = text;
+    c.appendChild(d);
+    if (++consoleCount > 300) { c.removeChild(c.firstChild); consoleCount--; }
+    if (atBottom) c.scrollTop = c.scrollHeight;
+  }
+
+  /* ---------- alarm sound + vibration ---------- */
+  function alarmStart() {
+    if (!$("soundOn").checked) return;
+    if (navigator.vibrate) { try { navigator.vibrate([400, 200, 400, 200, 400]); } catch (e) {} }
+    if (!audioCtx || beepTimer) return;
+    beepTimer = setInterval(function () {
+      if (!st.alarm || st.muted) return;
+      var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.frequency.value = 2400; o.type = "square";
+      g.gain.setValueAtTime(0.08, audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.22);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(); o.stop(audioCtx.currentTime + 0.24);
+      if (navigator.vibrate) { try { navigator.vibrate(250); } catch (e) {} }
+    }, 500);
+  }
+  function alarmStop() { clearInterval(beepTimer); beepTimer = null; }
+  function unlockAudio() {
+    if (audioCtx) return;
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { audioCtx = null; }
+  }
+
+  /* ---------- rendering ---------- */
+  function render() {
+    var s = $("status"), big = $("stBig"), sub = $("stSub"), meta = $("stMeta"), lab = $("stLabel");
+    var now = Date.now();
+    if (st.muted && now > st.muteUntil) st.muted = false;
+    s.className = "status";
+    $("btnMute").hidden = !(st.alarm && mode !== "offline");
+    $("btnMute").textContent = st.muted ? "Muted" : "Mute 60 s";
+    $("btnMute").disabled = st.muted;
+
+    if (mode === "offline" && st.phase === "none" && !st.lastData) {
+      lab.textContent = "Detector"; big.textContent = "NOT CONNECTED";
+      sub.textContent = "Tap Connect, or Demo to see sample data.";
+    } else if (st.alarm) {
+      s.className = "status alarm"; lab.textContent = "Alarm";
+      big.textContent = "GAS LEAK";
+      sub.textContent = st.failsafe ? "Strong LPG reading: fail-safe triggered. Ventilate, no flames, no switches."
+                                    : "LPG detected by the classifier. Ventilate, no flames, no switches.";
+    } else if (st.phase === "warmup") {
+      lab.textContent = "Starting up"; big.textContent = "WARMING UP";
+      sub.textContent = st.warmLeft != null ? ("Sensors ready in about " + st.warmLeft + " s.") : "Heating the gas sensors.";
+    } else if (st.phase === "calib") {
+      lab.textContent = "Starting up"; big.textContent = "CALIBRATING";
+      sub.textContent = "Keep the sensors in clean air for 10 seconds.";
+    } else if (st.fault) {
+      s.className = "status fault"; lab.textContent = "Check wiring"; big.textContent = "SENSOR FAULT";
+      sub.textContent = "A gas sensor reads out of range. Tap Self test for details.";
+    } else if (st.phase === "run") {
+      s.className = "status safe"; lab.textContent = "All clear"; big.textContent = "SAFE";
+      sub.textContent = "Air: " + (CLASS_SHORT[st.cls] || "Clean air") + (st.cls && st.cls !== "CLEAN AIR" ? ", not LPG, no alarm" : "");
+    } else {
+      lab.textContent = "Detector"; big.textContent = "WAITING";
+      sub.textContent = "Connected. Waiting for the first reading.";
+    }
+    if (st.muted) sub.textContent += " Buzzer muted.";
+    meta.textContent = st.lastData ? ("Last reading " + Math.max(0, Math.round((now - st.lastData) / 1000)) + " s ago" + (mode === "demo" ? " (demo data)" : "")) : "No data yet";
+
+    var ids = ["6", "2", "135"];
+    for (var i = 0; i < 3; i++) {
+      var r = st.r[i], g = gasIndex(r), bar = $("t" + ids[i]);
+      $("v" + ids[i]).textContent = g == null ? "--" : Math.round(Math.min(g, 100)) + "%";
+      $("r" + ids[i]).textContent = "Rs/R0 " + fmt(r, 3);
+      bar.style.width = (g == null ? 0 : Math.min(g, 100)) + "%";
+      bar.className = g == null ? "" : g >= 70 ? "high" : g >= 35 ? "mid" : "";
+    }
+
+    $("vT").innerHTML = fmt(st.t, 1) + "<small>°C</small>";
+    $("vH").innerHTML = fmt(st.rh, 1) + "<small>%</small>";
+    var rise = (st.rh != null && st.rhAvg != null) ? st.rh - st.rhAvg : null;
+    if (rise == null && st.rh != null && trend.length > 5) {
+      var first = trend.find(function (p) { return p.rh != null; });
+      if (first) rise = st.rh - first.rh;
+    }
+    $("vR").innerHTML = (rise == null ? "--" : (rise >= 0 ? "+" : "") + rise.toFixed(1)) + "<small>%</small>";
+
+    $("btnLog").textContent = st.logging ? "Stop logging" : "Start logging";
+    $("logStat").textContent = (st.logging ? "Logging" : "Not logging") + ". " + st.rows + " rows recorded, " + logLines.length + " lines total.";
+    Array.prototype.forEach.call(document.querySelectorAll("[data-label]"), function (b) {
+      b.setAttribute("aria-pressed", String(b.getAttribute("data-label") === st.label));
+    });
+    drawChart();
+  }
+
+  function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+  function drawChart() {
+    var cv = $("chart"), box = cv.parentElement;
+    var w = box.clientWidth, h = box.clientHeight, dpr = window.devicePixelRatio || 1;
+    if (!w || !h) return;
+    if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    var c = cv.getContext("2d");
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.clearRect(0, 0, w, h);
+    var padL = 34, padR = 34, padT = 8, padB = 20, pw = w - padL - padR, ph = h - padT - padB;
+    var ink2 = cssVar("--ink-2"), line = cssVar("--line"), ca = cssVar("--chart-a"), cb = cssVar("--chart-b");
+
+    c.font = "11px " + cssVar("--font-mono");
+    c.textBaseline = "middle";
+    [0, 50, 100].forEach(function (v) {
+      var y = padT + ph - v / 100 * ph;
+      c.strokeStyle = line; c.lineWidth = 1; c.setLineDash(v === 100 ? [4, 4] : []);
+      c.beginPath(); c.moveTo(padL, y); c.lineTo(padL + pw, y); c.stroke();
+      c.fillStyle = ink2; c.textAlign = "right"; c.fillText(v + "%", padL - 6, y);
+      c.textAlign = "left"; c.fillText(v + "", padL + pw + 6, y);
+    });
+    c.setLineDash([]);
+    c.textAlign = "left"; c.fillStyle = ink2; c.textBaseline = "alphabetic";
+    c.fillText("-2 min", padL, h - 4);
+    c.textAlign = "right"; c.fillText("now", padL + pw, h - 4);
+
+    var now = trend.length ? trend[trend.length - 1].t : Date.now();
+    function x(t) { return padL + pw - (now - t) / (TREND_SECONDS * 1000) * pw; }
+
+    /* LPG level: filled area */
+    var pts = trend.filter(function (p) { return p.g6 != null; });
+    if (pts.length > 1) {
+      c.beginPath();
+      pts.forEach(function (p, i) {
+        var y = padT + ph - Math.min(p.g6, 100) / 100 * ph;
+        if (i === 0) c.moveTo(x(p.t), y); else c.lineTo(x(p.t), y);
+      });
+      c.strokeStyle = ca; c.lineWidth = 2; c.stroke();
+      c.lineTo(x(pts[pts.length - 1].t), padT + ph); c.lineTo(x(pts[0].t), padT + ph); c.closePath();
+      c.globalAlpha = 0.15; c.fillStyle = ca; c.fill(); c.globalAlpha = 1;
+      var last = pts[pts.length - 1];
+      c.beginPath(); c.arc(x(last.t), padT + ph - Math.min(last.g6, 100) / 100 * ph, 3.5, 0, Math.PI * 2);
+      c.fillStyle = ca; c.fill();
+    }
+    /* humidity: line on the same 0..100 scale (right axis is %RH) */
+    var hp = trend.filter(function (p) { return p.rh != null; });
+    if (hp.length > 1) {
+      c.beginPath();
+      hp.forEach(function (p, i) {
+        var y = padT + ph - Math.min(p.rh, 100) / 100 * ph;
+        if (i === 0) c.moveTo(x(p.t), y); else c.lineTo(x(p.t), y);
+      });
+      c.strokeStyle = cb; c.lineWidth = 2; c.stroke();
+    }
+  }
+
+  /* ---------- Web Serial connection ---------- */
+  async function connect() {
+    unlockAudio();
+    if (mode === "demo") stopDemo();
+    try {
+      try {
+        port = await navigator.serial.requestPort({ allowedBluetoothServiceClassIds: [SPP_UUID] });
+      } catch (e) {
+        if (e && e.name === "TypeError") port = await navigator.serial.requestPort();
+        else throw e;
+      }
+      await port.open({ baudRate: 9600 });
+    } catch (e) {
+      port = null;
+      if (e && e.name === "NotFoundError") toast("No device chosen. Pair HC-05 first, then try again.");
+      else toast("Could not open the HC-05: " + (e && e.message ? e.message : e));
+      return;
+    }
+    resetState();
+    setMode("serial");
+    toast("Connected to HC-05");
+    keepReading = true;
+    readLoop();
+    setTimeout(function () { send("?"); }, 400);
+  }
+
+  async function readLoop() {
+    while (port && port.readable && keepReading) {
+      var decoder = new TextDecoderStream();
+      readClosed = port.readable.pipeTo(decoder.writable).catch(function () {});
+      reader = decoder.readable.getReader();
+      try {
+        for (;;) {
+          var res = await reader.read();
+          if (res.done) break;
+          if (res.value) feedText(res.value);
+        }
+      } catch (e) {
+        /* connection dropped */
+      } finally {
+        try { reader.releaseLock(); } catch (e) {}
+      }
+      break;
+    }
+    if (mode === "serial") { await disconnect(true); }
+  }
+
+  async function disconnect(lost) {
+    keepReading = false;
+    try { if (reader) await reader.cancel(); } catch (e) {}
+    try { if (readClosed) await readClosed; } catch (e) {}
+    try { if (port) await port.close(); } catch (e) {}
+    port = null; reader = null;
+    alarmStop();
+    setMode("offline");
+    if (lost) toast("Connection to HC-05 lost");
+  }
+
+  function resetState() {
+    st.phase = "none"; st.r = [null, null, null]; st.rh = null; st.t = null; st.rhAvg = null;
+    st.cls = null; st.alarm = false; st.fault = false; st.failsafe = false; st.muted = false;
+    st.lastData = 0; st.base = null; st.logging = false; st.label = "X"; st.rows = 0;
+    trend = []; lastTrendPush = 0; lineBuf = "";
+  }
+
+  /* ---------- demo mode: a scripted kitchen session ---------- */
+  var demo = { t: 0, sec: 0, scene: "clean", r: [1, 1, 1], rh: 56, avg: 56, temp: 27.4, alarm: false, clear: 0, votes: [], log: false, label: -1, run: 0, ms: 0 };
+  var DEMO_SCRIPT = [
+    [0, "warm"], [6, "calib"], [8, "clean"], [22, "steam"], [38, "clean"],
+    [52, "lpg"], [66, "clean"], [84, "smoke"], [98, "clean"]
+  ];
+  var DEMO_TARGET = {
+    clean: [1, 1, 1], warm: [1, 1, 1], calib: [1, 1, 1],
+    steam: [0.74, 0.72, 0.73], lpg: [0.34, 0.6, 0.93], smoke: [0.83, 0.5, 0.56]
+  };
+  function demoLine(s) { handleLine(s); }
+  function demoTick() {
+    demo.t += 0.5; demo.ms += 500;
+    var loopT = demo.t % 112, scene = "clean";
+    DEMO_SCRIPT.forEach(function (e) { if (loopT >= e[0]) scene = e[1]; });
+    if (scene !== demo.scene) {
+      if (scene === "calib") demoLine("# CALIBRATING, KEEP SENSORS IN CLEAN AIR");
+      if (demo.scene === "calib") { demoLine("# CALIBRATION DONE"); demoLine("B,282,301,265"); }
+      demo.scene = scene;
+    }
+    if (scene === "warm") { if (demo.t % 2 === 0) demoLine("# WARMING UP, " + Math.max(0, Math.round(6 - loopT)) * 20 + " S LEFT"); return; }
+    if (scene === "calib") return;
+    var tg = DEMO_TARGET[scene];
+    for (var i = 0; i < 3; i++) demo.r[i] += (tg[i] - demo.r[i]) * 0.18 + (Math.random() - 0.5) * 0.006;
+    var rhTarget = scene === "steam" ? 81 : 56;
+    demo.rh += (rhTarget - demo.rh) * 0.15; demo.avg += (demo.rh - demo.avg) * 0.003;
+    var cls = "CLEAN AIR", r = demo.r;
+    if (!(r[0] > 0.85 && r[1] > 0.85 && r[2] > 0.85)) {
+      if (r[0] / r[2] < 0.8) cls = "LPG";
+      else if (demo.rh - demo.avg > 8) cls = "STEAM";
+      else if (r[1] / r[0] < 0.85) cls = "SMOKE";
+      else cls = "STEAM";
+    }
+    var want = cls === "LPG" || r[0] < FAILSAFE_R6;
+    if (want) { demo.clear = 0; if (!demo.alarm) { demo.alarm = true; demoLine("# ALARM ON"); } }
+    else if (demo.alarm && ++demo.clear >= 10) { demo.alarm = false; demo.clear = 0; demoLine("# ALARM CLEARED"); }
+    if (demo.log) {
+      var raw = r.map(function (x) { var v = 5 / (1 + 10 * x); return Math.round(v / 2 / 3.3 * 4095); });
+      demoLine(["D", demo.ms, demo.run, demo.label, raw[0], raw[1], raw[2], Math.round(demo.rh * 100), Math.round(demo.temp * 100), Math.round(demo.avg * 100)].join(","));
+    }
+    if (demo.t % 1 === 0) {
+      demoLine(["S", Math.round(demo.t), r[0].toFixed(3), r[1].toFixed(3), r[2].toFixed(3), demo.rh.toFixed(1), demo.temp.toFixed(1), cls, demo.alarm ? "ALARM" : "SAFE"].join(","));
+    }
+  }
+  function demoCommand(ch) {
+    var c = ch.toUpperCase();
+    if (c === "T") { ["# SELF TEST", "# MQ6 RAW 282 OK", "# MQ2 RAW 301 OK", "# MQ135 RAW 265 OK", "# AHT20 OK 27.4 C 56.0 %RH", "# MODEL PLACEHOLDER RULES"].forEach(demoLine); }
+    else if (c === "C") { demo.t = 6; demo.scene = "warm"; }
+    else if (c === "M") { if (!demo.alarm) toast("No alarm to mute"); else if (demo.r[0] < FAILSAFE_R6) demoLine("# MUTE REFUSED, STRONG LEAK"); else demoLine("# BUZZER MUTED FOR 60 S"); }
+    else if (c === "E") { demoLine("# ALARM EVENTS, TOTAL 1"); demoLine("# 1 AT 00:00:56 FOR 18 S PEAK 92% BY MODEL"); }
+    else if (c === "L") { demo.log = true; demo.run++; demoLine("# LOG START"); demoLine("B,282,301,265"); }
+    else if (c === "R") { demo.log = false; demoLine("# LOG STOP"); }
+    else if (c >= "0" && c <= "4") { demo.label = +c; demo.run++; demoLine("# LABEL " + c + " RUN " + demo.run); }
+    else if (c === "X") { demo.label = -1; demoLine("# LABEL CLEARED"); }
+    else if (c === "N") { toast("OLED page changed"); }
+    else if (c === "?") { demoLine("# COMMANDS"); }
+  }
+  function startDemo() {
+    unlockAudio();
+    if (mode === "serial") return;
+    resetState();
+    demo.t = 0; demo.ms = 0; demo.scene = "clean"; demo.r = [1, 1, 1]; demo.rh = 56; demo.avg = 56; demo.alarm = false; demo.log = false; demo.label = -1;
+    setMode("demo");
+    demoLine("# GAS LEAK DETECTOR READY");
+    demoTimer = setInterval(demoTick, 500);
+  }
+  function stopDemo() {
+    clearInterval(demoTimer); demoTimer = null; alarmStop();
+    resetState(); setMode("offline");
+  }
+  /* fast-forward helper for previews: run n demo ticks at once */
+  window.__demoFastForward = function (n) { for (var i = 0; i < n; i++) demoTick(); render(); };
+  window.__feed = function (line) { handleLine(line); };
+
+  /* ---------- saving the log for train.py ---------- */
+  function saveLog() {
+    if (!logLines.length) { toast("Nothing recorded yet"); return; }
+    var stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
+    var blob = new Blob([logLines.join("\r\n") + "\r\n"], { type: "text/plain" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "gaslog-" + stamp + ".txt";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+    toast("Saved " + a.download);
+  }
+
+  /* ---------- wiring up the buttons ---------- */
+  $("btnConnect").addEventListener("click", function () { mode === "serial" ? disconnect(false) : connect(); });
+  $("btnDemo").addEventListener("click", function () { mode === "demo" ? stopDemo() : startDemo(); });
+  $("btnMute").addEventListener("click", function () { send("M"); });
+  $("btnSave").addEventListener("click", saveLog);
+  $("btnLog").addEventListener("click", function () { send(st.logging ? "R" : "L"); });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-cmd]"), function (b) {
+    b.addEventListener("click", function () { send(b.getAttribute("data-cmd")); });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-label]"), function (b) {
+    b.addEventListener("click", function () { send(b.getAttribute("data-label")); });
+  });
+  var calArmed = 0;
+  $("btnCal").addEventListener("click", function () {
+    var b = $("btnCal");
+    if (Date.now() - calArmed < 3000) {
+      calArmed = 0; b.classList.remove("armed"); b.textContent = "Calibrate"; send("C");
+    } else {
+      calArmed = Date.now(); b.classList.add("armed"); b.textContent = "Tap again: clean air?";
+      setTimeout(function () { if (calArmed && Date.now() - calArmed >= 2900) { calArmed = 0; b.classList.remove("armed"); b.textContent = "Calibrate"; } }, 3000);
+    }
+  });
+  $("showData").addEventListener("change", function () { toast(this.checked ? "Showing data rows" : "Hiding data rows"); });
+  window.addEventListener("resize", drawChart);
+  if (window.matchMedia) {
+    try { window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawChart); } catch (e) {}
+  }
+  if (navigator.serial && navigator.serial.addEventListener) {
+    navigator.serial.addEventListener("disconnect", function (e) { if (port && e.target === port) disconnect(true); });
+  }
+  setInterval(render, 1000);
+
+  checkSupport();
+  setMode("offline");
+})();
+</script>
+</body>
+</html>
