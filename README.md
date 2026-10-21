@@ -144,6 +144,25 @@ The MQ output can reach 5 V and the STM32 pins are 3.3 V only. The divider halve
 - Power the Black Pill from a **5 V USB wall charger**. Its 5V pin feeds the 5 V rail for the three MQ heaters and the HC-05. A laptop USB port (500 mA) is not enough for three heaters.
 - Connect the ST-Link with **three wires only** (SWDIO, SWCLK, GND). Connecting its 3.3V pin while the board is also on USB puts two supplies against each other.
 
+## Circuit diagram
+
+[![Wiring schematic](docs/schematic/lpg_detector_schematic.svg)](docs/schematic/lpg_detector_schematic.svg)
+
+Drawing LPG-SCH-001, rev A. Click the sheet to open it at full size; it is a vector SVG, so it stays sharp at any zoom. `docs/schematic/make_schematic.py` regenerates it.
+
+| Ref | Part | Connection |
+|---|---|---|
+| U1 | STM32F401CCU6 Black Pill | all signals; 5 V in over USB-C |
+| U2, U3, U4 | MQ-6, MQ-2, MQ-135 modules | AO through R1/R2, R3/R4, R5/R6 to PA1, PB0, PB1; 5 V |
+| R1 to R6 | 10 kOhm | three 2:1 dividers, 0 to 5 V in, 0 to 2.5 V out |
+| U5 | SSD1306 OLED, address 0x3C | I2C1 on PB6 (SCL), PB7 (SDA); 3V3 |
+| U6 | AHT20, address 0x38 | same I2C1 bus; 3V3 |
+| U7 | HC-05 Bluetooth | PA9 (TX) to RXD, PA10 (RX) to TXD; 5 V |
+| BZ1 | Active buzzer | PB12 to buzzer +, buzzer - to GND |
+| J2 | SWD to ST-Link V2 | PA13 SWDIO, PA14 SWCLK, GND; 3.3 V pin left open |
+| SW1, D1 | KEY button, LED | fitted on the Black Pill, PA0 and PC13 |
+| PS1 | 5 V USB wall adapter, 1 A or more | Black Pill USB-C port |
+
 ---
 
 ## Repository layout
@@ -165,6 +184,7 @@ bringup_tests/
   oled_test.c         OLED only
   blink_button.c      LED and button only, no external parts
 docs/images/          screenshots
+docs/schematic/       wiring schematic (SVG) and its generator
 ```
 
 ---
