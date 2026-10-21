@@ -21,7 +21,7 @@
  * KEY: short = next OLED page / mute, hold 1 s = self test,
  *      hold 4 s = calibrate.
  * Bluetooth keys: L/R log on/off, 0-4 label, X clear, C cal, T test,
- *      N next page, M mute, E events, ? help
+ *      N next page, A auto pages on/off, M mute, E events, ? help
  */
 
 #include "stm32f4xx.h"
@@ -50,7 +50,9 @@
 #define TEST_PRESS_MS       1000U   /* hold 1 s = self test               */
 #define CAL_PRESS_MS        4000U   /* hold 4 s = calibrate               */
 #define MUTE_MS             60000U  /* alarm mute time                    */
-#define UI_PAGES            5U      /* OLED pages cycled by short press   */
+#define UI_PAGES            6U      /* OLED pages cycled by short press   */
+#define PAGE_ALARM_CHECK    5U      /* index of the ALARM CHECK page      */
+#define AUTO_PAGE_MS        5000U   /* auto mode: next page every 5 s     */
 #define TREND_LEN           128U    /* 128 points x 1 s = ~2 min graph     */
 #define EVT_MAX             5U      /* alarm events remembered            */
 
@@ -947,6 +949,9 @@ static int32_t      rh_c, rhb_c, temp_c;        /* x100 integers          */
 
 /* OLED user interface */
 static uint8_t      ui_page;                    /* 0..UI_PAGES-1          */
+static uint8_t      auto_pages;                 /* 1 = pages change by themselves */
+static uint32_t     last_page_ms;               /* when the page last changed     */
+static uint8_t      last_pred;                  /* latest raw model answer        */
 static char         toast_txt[22];              /* short bottom message   */
 static uint32_t     toast_until;
 
@@ -1043,7 +1048,7 @@ static void print_help(void)
               "# 0 CLEAN 1 LPG 2 SMOKE 3 STEAM 4 VOC (LABEL)\r\n"
               "# X CLEAR LABEL\r\n"
               "# C CALIBRATE NOW (CLEAN AIR)\r\n"
-              "# T SELF TEST   N NEXT OLED PAGE\r\n"
+              "# T SELF TEST   N NEXT OLED PAGE   A AUTO PAGES ON/OFF\r\n"
               "# M MUTE ALARM 60 S   E ALARM EVENT LOG\r\n"
               "# ? HELP\r\n"
               "# KEY: SHORT = NEXT PAGE / MUTE, HOLD 1 S = TEST, HOLD 4 S = CALIBRATE\r\n");
@@ -1231,6 +1236,13 @@ static void handle_command(char c)
         break;
     case 'N':
         ui_page = (uint8_t)((ui_page + 1U) % UI_PAGES);
+        last_page_ms = g_ms;
+        break;
+    case 'A':
+        auto_pages = (uint8_t)!auto_pages;
+        last_page_ms = g_ms;
+        uart_puts(auto_pages ? "# AUTO PAGES ON\r\n" : "# AUTO PAGES OFF\r\n");
+        toast(auto_pages ? "AUTO PAGES ON" : "AUTO PAGES OFF", 1500U);
         break;
     case 'M':
         try_mute(g_ms);
@@ -1619,6 +1631,60 @@ static void draw_system(uint32_t now, const char *hdr)
     fb_text(0, 51, b, 1, 1);
 }
 
+/* Page 6: both alarm rules, live, and how close each one is.
+   Boxes = the model's last 10 answers (filled = said LPG). */
+static void draw_alarm_check(uint32_t now, const char *hdr)
+{
+    char b[24];
+    str_t s;
+    uint8_t k, lpg = 0, idx6 = gas_index(f[F_R6]);
+    int x;
+
+    fb_header("ALARM CHECK", hdr, (uint8_t)((now / 500U) & 1U));
+
+    str_init(&s, b, sizeof(b));
+    str_s(&s, "MODEL SAYS: "); str_s(&s, class_short[last_pred]);
+    fb_text(0, 11, b, 1, 1);
+
+    /* oldest vote on the left, newest on the right */
+    for (k = 0; k < VOTE_WINDOW; k++) {
+        uint8_t v = votes[(uint8_t)((vote_idx + k) % VOTE_WINDOW)];
+        x = 4 + (int)k * 12;
+        if (v == CLS_LPG) { fb_fill(x, 20, 10, 8, 1); lpg++; }
+        else              fb_rect(x, 20, 10, 8, 1);
+    }
+    str_init(&s, b, sizeof(b));
+    str_s(&s, "LPG "); str_u(&s, lpg); str_s(&s, "/10, ALARM AT ");
+    str_u(&s, LPG_VOTES_TO_ALARM);
+    fb_text(0, 30, b, 1, 1);
+
+    fb_text(0, 39, "BAR", 1, 1);
+    fb_bar(20, 38, 80, 8, idx6);
+    str_init(&s, b, sizeof(b));
+    str_u(&s, idx6 > 100U ? 100U : idx6); str_c(&s, '%');
+    fb_text_right(OLED_W, 39, b, 1, 1);
+    fb_text(0, 47, "FULL BAR 1S = ALARM", 1, 1);
+
+    /* bottom line: what happens next, in words */
+    str_init(&s, b, sizeof(b));
+    if (alarm_on && failsafe_hit) {
+        str_s(&s, "ALARM: BAR WAS FULL");
+    } else if (alarm_on) {
+        str_s(&s, "ALARM: LPG VOTES");
+    } else if (failsafe_count > 0U) {
+        uint32_t left_ms = (uint32_t)(FAILSAFE_HOLD - (failsafe_count < FAILSAFE_HOLD ? failsafe_count : FAILSAFE_HOLD)) * 100U;
+        str_s(&s, "BAR FULL, ALARM "); str_u(&s, left_ms / 1000U); str_c(&s, '.');
+        str_u(&s, (left_ms % 1000U) / 100U); str_c(&s, 'S');
+    } else if (lpg > 0U && lpg < LPG_VOTES_TO_ALARM) {
+        str_s(&s, "SAFE, ");
+        str_u(&s, (uint32_t)(LPG_VOTES_TO_ALARM - lpg));
+        str_s(&s, (LPG_VOTES_TO_ALARM - lpg) == 1U ? " MORE VOTE" : " MORE VOTES");
+    } else {
+        str_s(&s, "SAFE");
+    }
+    fb_footer(b);
+}
+
 /* bottom bar: button-hold hint has priority, then short messages */
 static void draw_overlays(uint32_t now)
 {
@@ -1643,14 +1709,16 @@ static void compose_display(uint32_t now)
     if ((int32_t)(selftest_until - now) > 0) draw_selftest(now);
     else if (app_state == ST_WARMUP)         draw_warmup(now);
     else if (app_state == ST_CALIBRATE)      draw_calibrate(now);
-    else if (alarm_on)                       draw_dashboard(now, hdr);   /* alarm forces page 1 */
+    else if (alarm_on && ui_page != PAGE_ALARM_CHECK)
+        draw_dashboard(now, hdr);           /* alarm jumps to page 1, unless watching the check page */
     else {
         switch (ui_page) {
         case 0:  draw_dashboard(now, hdr); break;
         case 1:  draw_sensors(now, hdr);   break;
         case 2:  draw_trend(now, hdr);     break;
         case 3:  draw_climate(now, hdr);   break;
-        default: draw_system(now, hdr);    break;
+        case 4:  draw_system(now, hdr);    break;
+        default: draw_alarm_check(now, hdr); break;
         }
     }
     draw_overlays(now);
@@ -1674,6 +1742,7 @@ static void step_run(uint32_t now)
     infer_cycles = DWT_CYCCNT_REG - c0;
     if (infer_cycles > infer_cycles_max) infer_cycles_max = infer_cycles;
     if (pred >= NUM_CLASSES) pred = CLS_CLEAN;
+    last_pred = pred;
 
     /* majority vote over the last second */
     votes[vote_idx] = pred;
@@ -1761,6 +1830,12 @@ static void send_status_line(uint32_t ms)
     str_c(&s, ',');
     str_s(&s, class_name[shown_class]); str_c(&s, ',');
     str_s(&s, alarm_on ? "ALARM" : (sensor_fault ? "FAULT" : "SAFE"));
+    {
+        uint8_t k, lpg = 0;
+        for (k = 0; k < VOTE_WINDOW; k++) if (votes[k] == CLS_LPG) lpg++;
+        str_c(&s, ','); str_u(&s, lpg);                      /* LPG votes of last 10 */
+        str_c(&s, ','); str_s(&s, class_short[last_pred]);   /* latest raw answer    */
+    }
     str_s(&s, "\r\n");
     uart_puts(b);
 }
@@ -1825,6 +1900,7 @@ int main(void)
             if (alarm_on) try_mute(now);                    /* hush       */
             else if (app_state == ST_RUN) {
                 ui_page = (uint8_t)((ui_page + 1U) % UI_PAGES);
+                last_page_ms = now;
                 chirp(15);                                  /* click      */
             }
         }
@@ -1885,6 +1961,13 @@ int main(void)
         }
 
         /* ---- outputs ---- */
+        /* auto pages: step every 5 s, but hold still during an alarm */
+        if (auto_pages && app_state == ST_RUN && !alarm_on &&
+            (now - last_page_ms) >= AUTO_PAGE_MS) {
+            ui_page = (uint8_t)((ui_page + 1U) % UI_PAGES);
+            last_page_ms = now;
+        }
+
         /* trend graphs: one point per second */
         if ((now - last_trend_ms) >= 1000U) {
             last_trend_ms = now;

@@ -21,7 +21,8 @@ This project reads **three gas sensors at once**. LPG, smoke, steam and alcohol 
 - AHT20 temperature and humidity sensor over I2C (humidity helps tell steam from gas)
 - On-chip classifier: CLEAN AIR, LPG, SMOKE, STEAM, ALCOHOL/VOC
 - Fail-safe: a strong MQ-6 response always alarms, even if the model disagrees
-- 0.96" SSD1306 OLED with 5 pages: dashboard, sensors, 2-minute trend graph, climate, system
+- 0.96" SSD1306 OLED with 6 pages: dashboard, sensors, 2-minute trend graph, climate, system, and a live ALARM CHECK page that shows the model voting
+- Auto page mode for demos (pages change every 5 s)
 - Buzzer and LED alarm, with a 60 s mute that is refused during a strong leak
 - HC-05 Bluetooth: live status, commands, and data logging for training
 - Phone and laptop app (`phone_app/gas_monitor.html`) with live gauges, chart and alarm
@@ -179,7 +180,7 @@ docs/images/          screenshots
    - **C/C++**: Optimization **-O1**
    - **Output**: tick **Create HEX File**
    - **Debug**: ST-Link Debugger. **Utilities**: tick **Use Debug Driver**.
-5. Build with **F7**. Code size is about 25 KB, under the 32 KB limit of the free Keil licence.
+5. Build with **F7**. Code size is about 19 KB at -O1, under the 32 KB limit of the free Keil licence.
 
 Before building, check these two lines in `main.c`:
 
@@ -210,7 +211,7 @@ If the ST-Link reports "No target connected", hold BOOT0, tap RST, release BOOT0
 
 | Action | Result |
 |---|---|
-| Short press | Next OLED page (during an alarm: mute buzzer 60 s) |
+| Short press | Next OLED page, 1 to 6 (during an alarm: mute buzzer 60 s) |
 | Hold 1 s | Self test |
 | Hold 4 s | Recalibrate (also skips the warm-up) |
 
@@ -225,8 +226,16 @@ The bottom of the OLED shows what will happen when you release the button.
 | 3 MQ6 Trend | Last 2 minutes of the MQ-6 gas level |
 | 4 Climate | Temperature, humidity, humidity rise and a humidity graph |
 | 5 System | Model type, inference time, uptime, alarm count, calibration baseline |
+| 6 Alarm check | The model's latest answer, its last 10 votes as boxes (filled = LPG), the MQ-6 bar against the full-bar limit, and a line saying how close the alarm is |
 
-During an alarm the screen jumps to the dashboard and flashes.
+During an alarm the screen jumps to the dashboard and flashes, unless you are on the ALARM CHECK page, which stays so you can watch the rules.
+Send `A` over Bluetooth to turn auto pages on or off: the page then changes every 5 s by itself.
+
+### Seeing the model work
+
+![ALARM CHECK page](docs/images/oled_alarm_check.png)
+
+Open page 6 (ALARM CHECK). Every 0.1 s the model gives one answer. The 10 boxes are the last 10 answers; a filled box means it said LPG. When 6 boxes are filled, the buzzer starts (rule A). The bar below is rule B: when it is full for 1 second, the buzzer starts whatever the boxes show. Page 5 shows how long one run of the model takes in microseconds.
 
 ---
 
@@ -244,6 +253,7 @@ Pair the HC-05 (PIN **1234** or **0000**). Use the phone app in `phone_app/`, or
 | `C` | Calibrate now (clean air) |
 | `T` | Self test |
 | `N` | Next OLED page |
+| `A` | Auto pages on / off |
 | `M` | Mute alarm 60 s (refused during a strong leak) |
 | `E` | Alarm event log |
 | `?` | Help |
@@ -251,7 +261,7 @@ Pair the HC-05 (PIN **1234** or **0000**). Use the phone app in `phone_app/`, or
 ### Output lines
 
 ```
-S,<sec>,<mq6 rs/r0>,<mq2 rs/r0>,<mq135 rs/r0>,<%RH>,<degC>,<class>,<SAFE|ALARM|FAULT>    once a second
+S,<sec>,<mq6 rs/r0>,<mq2 rs/r0>,<mq135 rs/r0>,<%RH>,<degC>,<class>,<SAFE|ALARM|FAULT>,<lpg votes 0-10>,<latest answer>    once a second
 B,<base_mq6>,<base_mq2>,<base_mq135>                                                    calibration baseline
 D,<ms>,<run>,<label>,<raw6>,<raw2>,<raw135>,<rh x100>,<temp x100>,<rh_avg x100>         10 Hz while logging
 # <message>                                                                              events and help
@@ -268,7 +278,7 @@ D,<ms>,<run>,<label>,<raw6>,<raw2>,<raw135>,<rh x100>,<temp x100>,<rh_avg x100> 
 - **iPhone** cannot connect to the HC-05 (no classic Bluetooth serial on iOS).
 - The **Demo** button plays a sample session without hardware.
 
-The app shows the status, gas levels, temperature, humidity and a 2-minute chart. It beeps and vibrates on an alarm, sends commands, and records labelled data. **Save log file** produces a file `ml/train.py` can read.
+The app shows the status, an alarm check panel (model answer, LPG votes, MQ-6 bar, how close the alarm is), gas levels, temperature, humidity and a 2-minute chart. It beeps and vibrates on an alarm, sends commands, and records labelled data. **Save log file** produces a file `ml/train.py` can read.
 
 ---
 
@@ -344,7 +354,7 @@ Very dense smoke held against the sensors can trigger the fail-safe. This is del
 | Item | Value |
 |---|---|
 | Clock | HSI 16 MHz, set explicitly at startup |
-| Flash | about 25 KB (GCC -O2) |
+| Flash | about 19 KB (GCC -O1), 28 KB (-O2) |
 | Static RAM | about 6.7 KB of 64 KB |
 | Worst-case stack | about 0.5 KB of the 1 KB default |
 | Sampling | 10 Hz, OLED and AHT20 never block the loop |

@@ -27,7 +27,8 @@ MQ sensors and HC-05 run from 5 V. OLED and AHT20 from 3V3.
 - `firmware/main.c` + `features.h` + `model.h`: main firmware, Keil MDK + CMSIS, register level, no HAL. Clock forced to HSI 16 MHz.
 - `firmware/single_file/main.c`: same firmware merged into one file. Regenerate it if the three files change.
 - `ml/train.py`: reads Bluetooth logs (`B,` and `D,` lines), trains a depth-5 decision tree, writes `firmware/model.h`. Its feature maths must match `features.h` exactly.
-- `phone_app/gas_monitor.html`: Web Serial dashboard for the HC-05.
+- `phone_app/gas_monitor.html`: Web Serial dashboard for the HC-05. It parses the `S,` status line (11 fields: ...,class,state,lpg_votes,latest_answer), `B,`, `D,` and `#` lines.
+- OLED has 6 pages; page 6 is ALARM CHECK (vote boxes + MQ-6 bar). Bluetooth `A` toggles auto pages.
 - `bringup_tests/`: small step-by-step hardware tests.
 
 ## Rules for changes
@@ -37,7 +38,7 @@ MQ sensors and HC-05 run from 5 V. OLED and AHT20 from 3V3.
   `Copyright (c) 2026 Nimal Danyath K (nimaldanyathk). All rights reserved.`
 - Do not use em dashes in code comments or docs.
 - Keep C code C90-friendly (declarations at the top of blocks) so Keil ARM Compiler 5 and 6 both build it.
-- Flash budget: Keil free licence is 32 KB. Current build is about 25 KB.
+- Flash budget: Keil free licence is 32 KB. Current build is about 19 KB at -O1 (28 KB at -O2).
 - Never commit recorded logs from `ml/logs/`.
 
 ## Checking a change

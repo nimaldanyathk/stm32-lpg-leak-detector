@@ -25,4 +25,3 @@ __pycache__/
 # Recorded sensor logs (keep them out of git unless you mean to share them)
 ml/logs/*.txt
 ml/logs/*.csv
-!ml/logs/README.txt

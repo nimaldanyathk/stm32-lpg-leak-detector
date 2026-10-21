@@ -163,6 +163,17 @@ canvas { width: 100%; height: 100%; display: block; }
 .note { font-size: 13px; color: var(--ink-2); margin: 0; }
 .note b { color: var(--ink); }
 
+/* alarm check */
+.chk-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.chk-row .k { font: 500 12px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+.chk-val { font: 700 24px/1 var(--font-display); letter-spacing: .02em; }
+.votes { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 6px; }
+.votes i { height: 20px; border: 2px solid var(--line); border-radius: 4px; display: block; }
+.votes i.on { background: var(--danger); border-color: var(--danger); }
+.chk-status { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--panel-2); font-weight: 600; }
+.chk-status.hot { background: var(--danger-bg); color: #fff; }
+.chk-status.warm { background: var(--warn-bg); color: #fff; }
+
 /* console */
 .console {
   font: 400 12px/1.5 var(--font-mono); background: var(--panel-2); border-radius: 8px;
@@ -208,6 +219,18 @@ details summary { cursor: pointer; font-weight: 600; }
     <button class="mute" id="btnMute" hidden>Mute 60 s</button>
   </section>
 
+  <section class="panel" aria-labelledby="hChk">
+    <h2 id="hChk">Alarm check <small>why it beeps</small></h2>
+    <div class="chk-row"><span class="k">Model says</span><span class="chk-val" id="cPred">--</span></div>
+    <div class="votes" id="cVotes" role="img" aria-label="LPG votes in the last second"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <span class="stat" id="cVoteTxt">Rule A: LPG votes --/10, alarm at 6</span>
+    <div class="meter">
+      <span class="name">Rule B: MQ-6 level <span>full bar for 1 s = alarm</span></span><span class="val" id="cBarVal">--</span>
+      <div class="track"><b id="cBar"></b></div>
+    </div>
+    <p class="chk-status" id="cStatus">Waiting for the detector</p>
+  </section>
+
   <section class="panel" aria-labelledby="hGas">
     <h2 id="hGas">Gas sensors <small>100% = fail-safe level</small></h2>
     <div class="meters">
@@ -250,7 +273,9 @@ details summary { cursor: pointer; font-weight: 600; }
       <button data-cmd="T" class="needs-link">Self test</button>
       <button id="btnCal" class="needs-link">Calibrate</button>
       <button data-cmd="N" class="needs-link">Next OLED page</button>
+      <button id="btnAuto" class="needs-link">Auto pages: off</button>
       <button data-cmd="E" class="needs-link">Alarm history</button>
+      <button data-cmd="?" class="needs-link">Help in messages</button>
     </div>
     <p class="note">Calibrate only in <b>clean air</b>. It takes 10 seconds.</p>
   </section>
@@ -284,7 +309,7 @@ details summary { cursor: pointer; font-weight: 600; }
 
   <details class="panel">
     <summary>How to connect</summary>
-    <p class="note"><b>Android:</b> pair HC-05 in Bluetooth settings first (PIN 1234 or 0000), then open this page in Chrome 137 or newer and tap Connect HC-05.</p>
+    <p class="note"><b>Android:</b> pair HC-05 in Bluetooth settings first (PIN 1234 or 0000). Close any other Bluetooth terminal app, because the HC-05 accepts only one connection. Allow Chrome the <b>Nearby devices</b> permission. Open this page from its https link in Chrome 137 or newer (not from WhatsApp or a file manager), then tap Connect HC-05.</p>
     <p class="note"><b>Laptop:</b> pair HC-05 in Windows Bluetooth settings, open this file in Chrome or Edge, tap Connect HC-05 and pick the HC-05 COM port.</p>
     <p class="note">iPhone and Safari cannot connect to the HC-05. Demo works everywhere.</p>
   </details>
@@ -302,6 +327,7 @@ details summary { cursor: pointer; font-weight: 600; }
   var FAILSAFE_R6 = 0.40;                 /* gas index 100% at this Rs/R0 */
   var VC = 5.0, VREF = 3.3, FULL = 4095, DIV = 2.0;
   var TREND_SECONDS = 120;
+  var VOTES_TO_ALARM = 6;                 /* LPG_VOTES_TO_ALARM in main.c */
   var CLASS_SHORT = { "CLEAN AIR": "Clean air", "LPG": "LPG", "SMOKE": "Smoke", "STEAM": "Steam", "ALCOHOL/VOC": "Alcohol / VOC" };
 
   /* ---------- state ---------- */
@@ -313,7 +339,8 @@ details summary { cursor: pointer; font-weight: 600; }
     r: [null, null, null], rh: null, t: null, rhAvg: null,
     cls: null, alarm: false, fault: false, failsafe: false,
     muted: false, muteUntil: 0, lastData: 0, warmLeft: null,
-    base: null, logging: false, label: "X", rows: 0
+    base: null, logging: false, label: "X", rows: 0,
+    votes: null, pred: null, autoPages: false
   };
   var logLines = [];                      /* everything received, for saving */
   var trend = [];                         /* {t, g6, rh} one per second      */
@@ -396,6 +423,7 @@ details summary { cursor: pointer; font-weight: 600; }
       st.rh = p[5] === "-" ? null : parseFloat(p[5]);
       st.t = p[6] === "-" ? null : parseFloat(p[6]);
       st.cls = p[7];
+      if (p.length >= 11) { st.votes = parseInt(p[9], 10); st.pred = p[10]; }
       st.alarm = p[8] === "ALARM";
       st.fault = p[8] === "FAULT";
       if (!st.alarm) st.failsafe = false;
@@ -432,6 +460,8 @@ details summary { cursor: pointer; font-weight: 600; }
       else if (/^LOG STOP/.test(m))      { st.logging = false; }
       else if (/^LABEL (\d)/.test(m))    { st.label = RegExp.$1; }
       else if (/^LABEL CLEARED/.test(m)) { st.label = "X"; }
+      else if (/^AUTO PAGES ON/.test(m)) { st.autoPages = true; }
+      else if (/^AUTO PAGES OFF/.test(m)) { st.autoPages = false; }
       logConsole(line, cls);
     } else {
       logConsole(line, "data");
@@ -537,12 +567,34 @@ details summary { cursor: pointer; font-weight: 600; }
     }
     $("vR").innerHTML = (rise == null ? "--" : (rise >= 0 ? "+" : "") + rise.toFixed(1)) + "<small>%</small>";
 
+    renderCheck();
+    $("btnAuto").textContent = "Auto pages: " + (st.autoPages ? "on" : "off");
     $("btnLog").textContent = st.logging ? "Stop logging" : "Start logging";
     $("logStat").textContent = (st.logging ? "Logging" : "Not logging") + ". " + st.rows + " rows recorded, " + logLines.length + " lines total.";
     Array.prototype.forEach.call(document.querySelectorAll("[data-label]"), function (b) {
       b.setAttribute("aria-pressed", String(b.getAttribute("data-label") === st.label));
     });
     drawChart();
+  }
+
+  /* mirrors the ALARM CHECK page on the OLED */
+  function renderCheck() {
+    var predNames = { CLEAN: "Clean air", LPG: "LPG", SMOKE: "Smoke", STEAM: "Steam", VOC: "Alcohol / VOC" };
+    $("cPred").textContent = st.pred ? (predNames[st.pred] || st.pred) : "--";
+    var boxes = $("cVotes").children, v = st.votes;
+    for (var i = 0; i < boxes.length; i++) boxes[i].className = (v != null && i >= boxes.length - v) ? "on" : "";
+    $("cVoteTxt").textContent = "Rule A: LPG votes " + (v == null ? "--" : v) + "/10, alarm at " + VOTES_TO_ALARM;
+    var g = gasIndex(st.r[0]), bar = $("cBar");
+    bar.style.width = (g == null ? 0 : Math.min(g, 100)) + "%";
+    bar.className = g == null ? "" : g >= 70 ? "high" : g >= 35 ? "mid" : "";
+    $("cBarVal").textContent = g == null ? "--" : Math.round(Math.min(g, 100)) + "%";
+    var el = $("cStatus"), txt, cls = "chk-status";
+    if (st.phase !== "run" || st.r[0] == null) { txt = "Waiting for the detector"; }
+    else if (st.alarm) { txt = st.failsafe ? "Alarm: the MQ-6 bar was full" : "Alarm: buzzer is sounding"; cls += " hot"; }
+    else if (g != null && g >= 100) { txt = "Bar full: alarm in under 1 second"; cls += " warm"; }
+    else if (v != null && v > 0) { txt = "Safe, " + (VOTES_TO_ALARM - v) + " more LPG vote" + (VOTES_TO_ALARM - v === 1 ? "" : "s") + " to alarm"; cls += " warm"; }
+    else { txt = "Safe: no LPG votes, bar below full"; }
+    el.textContent = txt; el.className = cls;
   }
 
   function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
@@ -607,8 +659,12 @@ details summary { cursor: pointer; font-weight: 600; }
     unlockAudio();
     if (mode === "demo") stopDemo();
     try {
+      /* Android lists Bluetooth serial devices only when we ask for the SPP
+         service by filter. On a laptop the HC-05 is a normal COM port, so no filter. */
+      var opts = { allowedBluetoothServiceClassIds: [SPP_UUID] };
+      if (/Android/i.test(navigator.userAgent)) opts.filters = [{ bluetoothServiceClassId: SPP_UUID }];
       try {
-        port = await navigator.serial.requestPort({ allowedBluetoothServiceClassIds: [SPP_UUID] });
+        port = await navigator.serial.requestPort(opts);
       } catch (e) {
         if (e && e.name === "TypeError") port = await navigator.serial.requestPort();
         else throw e;
@@ -616,7 +672,7 @@ details summary { cursor: pointer; font-weight: 600; }
       await port.open({ baudRate: 9600 });
     } catch (e) {
       port = null;
-      if (e && e.name === "NotFoundError") toast("No device chosen. Pair HC-05 first, then try again.");
+      if (e && e.name === "NotFoundError") toast("No HC-05 found. Close other Bluetooth apps, allow Chrome Nearby devices, then try again.");
       else toast("Could not open the HC-05: " + (e && e.message ? e.message : e));
       return;
     }
@@ -664,11 +720,14 @@ details summary { cursor: pointer; font-weight: 600; }
     st.phase = "none"; st.r = [null, null, null]; st.rh = null; st.t = null; st.rhAvg = null;
     st.cls = null; st.alarm = false; st.fault = false; st.failsafe = false; st.muted = false;
     st.lastData = 0; st.base = null; st.logging = false; st.label = "X"; st.rows = 0;
+    st.votes = null; st.pred = null; st.autoPages = false;
     trend = []; lastTrendPush = 0; lineBuf = "";
   }
 
   /* ---------- demo mode: a scripted kitchen session ---------- */
-  var demo = { t: 0, sec: 0, scene: "clean", r: [1, 1, 1], rh: 56, avg: 56, temp: 27.4, alarm: false, clear: 0, votes: [], log: false, label: -1, run: 0, ms: 0 };
+  var demoVotes = [];
+  var SHORT_OF = { "CLEAN AIR": "CLEAN", "LPG": "LPG", "SMOKE": "SMOKE", "STEAM": "STEAM", "ALCOHOL/VOC": "VOC" };
+  var demo = { auto: false, t: 0, sec: 0, scene: "clean", r: [1, 1, 1], rh: 56, avg: 56, temp: 27.4, alarm: false, clear: 0, votes: [], log: false, label: -1, run: 0, ms: 0 };
   var DEMO_SCRIPT = [
     [0, "warm"], [6, "calib"], [8, "clean"], [22, "steam"], [38, "clean"],
     [52, "lpg"], [66, "clean"], [84, "smoke"], [98, "clean"]
@@ -700,7 +759,9 @@ details summary { cursor: pointer; font-weight: 600; }
       else if (r[1] / r[0] < 0.85) cls = "SMOKE";
       else cls = "STEAM";
     }
-    var want = cls === "LPG" || r[0] < FAILSAFE_R6;
+    demoVotes.push(cls); if (demoVotes.length > 10) demoVotes.shift();
+    var lpgVotes = demoVotes.filter(function (c) { return c === "LPG"; }).length;
+    var want = lpgVotes >= VOTES_TO_ALARM || r[0] < FAILSAFE_R6;
     if (want) { demo.clear = 0; if (!demo.alarm) { demo.alarm = true; demoLine("# ALARM ON"); } }
     else if (demo.alarm && ++demo.clear >= 10) { demo.alarm = false; demo.clear = 0; demoLine("# ALARM CLEARED"); }
     if (demo.log) {
@@ -708,7 +769,7 @@ details summary { cursor: pointer; font-weight: 600; }
       demoLine(["D", demo.ms, demo.run, demo.label, raw[0], raw[1], raw[2], Math.round(demo.rh * 100), Math.round(demo.temp * 100), Math.round(demo.avg * 100)].join(","));
     }
     if (demo.t % 1 === 0) {
-      demoLine(["S", Math.round(demo.t), r[0].toFixed(3), r[1].toFixed(3), r[2].toFixed(3), demo.rh.toFixed(1), demo.temp.toFixed(1), cls, demo.alarm ? "ALARM" : "SAFE"].join(","));
+      demoLine(["S", Math.round(demo.t), r[0].toFixed(3), r[1].toFixed(3), r[2].toFixed(3), demo.rh.toFixed(1), demo.temp.toFixed(1), cls, demo.alarm ? "ALARM" : "SAFE", lpgVotes, SHORT_OF[cls]].join(","));
     }
   }
   function demoCommand(ch) {
@@ -722,12 +783,14 @@ details summary { cursor: pointer; font-weight: 600; }
     else if (c >= "0" && c <= "4") { demo.label = +c; demo.run++; demoLine("# LABEL " + c + " RUN " + demo.run); }
     else if (c === "X") { demo.label = -1; demoLine("# LABEL CLEARED"); }
     else if (c === "N") { toast("OLED page changed"); }
+    else if (c === "A") { demo.auto = !demo.auto; demoLine(demo.auto ? "# AUTO PAGES ON" : "# AUTO PAGES OFF"); }
     else if (c === "?") { demoLine("# COMMANDS"); }
   }
   function startDemo() {
     unlockAudio();
     if (mode === "serial") return;
     resetState();
+    demoVotes = []; demo.auto = false;
     demo.t = 0; demo.ms = 0; demo.scene = "clean"; demo.r = [1, 1, 1]; demo.rh = 56; demo.avg = 56; demo.alarm = false; demo.log = false; demo.label = -1;
     setMode("demo");
     demoLine("# GAS LEAK DETECTOR READY");
@@ -758,6 +821,7 @@ details summary { cursor: pointer; font-weight: 600; }
   $("btnConnect").addEventListener("click", function () { mode === "serial" ? disconnect(false) : connect(); });
   $("btnDemo").addEventListener("click", function () { mode === "demo" ? stopDemo() : startDemo(); });
   $("btnMute").addEventListener("click", function () { send("M"); });
+  $("btnAuto").addEventListener("click", function () { send("A"); });
   $("btnSave").addEventListener("click", saveLog);
   $("btnLog").addEventListener("click", function () { send(st.logging ? "R" : "L"); });
   Array.prototype.forEach.call(document.querySelectorAll("[data-cmd]"), function (b) {
