@@ -5,6 +5,8 @@ A kitchen gas leak detector built on an **STM32F401CCU6 (Black Pill)**. It uses 
 Case study for **23CSE304 Embedded Systems**, Amrita Vishwa Vidyapeetham.
 Author: Nimal Danyath K ([@nimaldanyathk](https://github.com/nimaldanyathk))
 
+Phone app: https://nimaldanyathk.github.io/stm32-lpg-leak-detector/phone_app/gas_monitor.html (open in Chrome on Android, or Chrome / Edge on a laptop)
+
 ![OLED screens](docs/images/oled_screens.png)
 
 ---
