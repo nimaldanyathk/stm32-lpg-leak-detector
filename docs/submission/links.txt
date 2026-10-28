@@ -1,0 +1,31 @@
+Smart LPG Leak Detector on STM32  -  Team 7  -  23CSE304 Embedded Systems, Amrita Vishwa Vidyapeetham
+Team: Nimal Danyath K (CB.SC.U4CSE24033), Ruthwik Narayan P (CB.SC.U4CSE24043), Nikhil Raj L (CB.SC.U4CSE24026)
+
+GitHub repository (code, firmware, training script, phone app, docs)
+  https://github.com/nimaldanyathk/stm32-lpg-leak-detector
+
+Phone app, served over https (open in Chrome on Android, or Chrome / Edge on a laptop)
+  https://nimaldanyathk.github.io/stm32-lpg-leak-detector/phone_app/gas_monitor.html
+
+Schematic (drawing LPG-SCH-001, rev A)
+  https://github.com/nimaldanyathk/stm32-lpg-leak-detector/blob/main/docs/schematic/lpg_detector_schematic.svg
+  https://nimaldanyathk.github.io/stm32-lpg-leak-detector/docs/submission/lpg_detector_schematic_A3.pdf
+
+One-page write-up
+  https://github.com/nimaldanyathk/stm32-lpg-leak-detector/blob/main/docs/submission/Team_07_writeup.pdf
+
+Demo video (voice-over, subtitles)
+  YouTube: <paste the YouTube link here after uploading>
+  Repository copy (compressed, 1080p): https://github.com/nimaldanyathk/stm32-lpg-leak-detector/blob/main/docs/submission/lpg_detector_demo_team7.mp4
+  Full-quality file (185 MB): lpg_detector_demo_team7.mp4 in the lpg-detector folder on the Ultra Touch drive
+
+Video script and shot list
+  https://github.com/nimaldanyathk/stm32-lpg-leak-detector/blob/main/docs/submission/video_script.md
+
+Firmware entry points
+  https://github.com/nimaldanyathk/stm32-lpg-leak-detector/blob/main/firmware/main.c
+  https://github.com/nimaldanyathk/stm32-lpg-leak-detector/blob/main/firmware/model.h
+  https://github.com/nimaldanyathk/stm32-lpg-leak-detector/blob/main/ml/train.py
+
+Faculty submission form (one student per team)
+  https://forms.cloud.microsoft/r/60D3YxgM3g

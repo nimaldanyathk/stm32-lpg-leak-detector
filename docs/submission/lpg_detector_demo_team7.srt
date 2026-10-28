@@ -1,0 +1,239 @@
+1
+00:00:04,000 --> 00:00:05,510
+Good morning everyone.
+
+2
+00:00:05,760 --> 00:00:08,910
+Most kitchen gas alarms use one sensor and one threshold.
+
+3
+00:00:09,340 --> 00:00:14,210
+They go off when someone boils water or fries food, so people switch them off.
+
+4
+00:00:14,340 --> 00:00:16,910
+Then nobody is protected when a real leak happens.
+
+5
+00:00:17,080 --> 00:00:19,560
+This project is an LPG leak detector that can
+
+6
+00:00:19,600 --> 00:00:22,330
+tell the difference between a leak and normal cooking.
+
+7
+00:00:22,740 --> 00:00:26,870
+The detector is built on an STM32F401 Black Pill.
+
+8
+00:00:27,200 --> 00:00:31,570
+Three metal-oxide gas sensors feed the ADC through voltage dividers:
+
+9
+00:00:31,860 --> 00:00:39,440
+an MQ-6 for LPG, an MQ-2 for smoke, and an MQ-135 for alcohol and VOCs.
+
+10
+00:00:39,480 --> 00:00:42,770
+An AHT20 gives temperature and humidity.
+
+11
+00:00:43,160 --> 00:00:49,020
+A small OLED shows the status, a buzzer and an LED raise the alarm,
+
+12
+00:00:49,060 --> 00:00:52,550
+and an HC-05 module streams data to a phone over Bluetooth.
+
+13
+00:00:53,380 --> 00:00:57,500
+The firmware is register-level C with CMSIS, no HAL,
+
+14
+00:00:57,540 --> 00:01:02,610
+and it fits in about nineteen kilobytes of flash.
+
+15
+00:01:05,280 --> 00:01:06,180
+First, smoke.
+
+16
+00:01:06,480 --> 00:01:09,170
+An incense stick about twenty centimetres from the sensors.
+
+17
+00:01:09,440 --> 00:01:11,750
+MQ-2 reacts first and drops the most.
+
+18
+00:01:11,960 --> 00:01:13,910
+The detector labels the air SMOKE.
+
+19
+00:01:14,220 --> 00:01:18,910
+On the alarm check page the vote boxes stay empty, and the buzzer stays silent.
+
+20
+00:01:19,260 --> 00:01:21,630
+A normal gas alarm would already be sounding.
+
+21
+00:01:22,940 --> 00:01:24,090
+Now real LPG.
+
+22
+00:01:24,400 --> 00:01:27,170
+An unlit lighter, gas button pressed for two seconds,
+
+23
+00:01:27,420 --> 00:01:29,070
+ten centimetres from the sensors.
+
+24
+00:01:29,540 --> 00:01:34,710
+MQ-6 drops hardest, the tree says LPG, and the vote boxes fill one by one.
+
+25
+00:01:35,000 --> 00:01:39,390
+At six boxes the buzzer starts and the screen flashes GAS LEAK.
+
+26
+00:01:39,700 --> 00:01:42,450
+In this run the alarm came seconds after the gas.
+
+27
+00:01:42,760 --> 00:01:44,080
+Once the air is clean again,
+
+28
+00:01:44,120 --> 00:01:47,530
+the alarm clears by itself after five seconds of safe readings.
+
+29
+00:01:47,880 --> 00:01:49,650
+Now the mobile app.
+
+30
+00:01:49,860 --> 00:01:52,380
+The phone app runs in Chrome over Bluetooth using Web Serial,
+
+31
+00:01:52,420 --> 00:01:54,410
+served from an https page.
+
+32
+00:01:54,620 --> 00:02:00,120
+It shows the same status live: the air class, the model's votes, the MQ-6 bar,
+
+33
+00:02:00,160 --> 00:02:03,960
+gas levels, temperature, humidity and a two-minute chart.
+
+34
+00:02:04,000 --> 00:02:06,760
+It beeps on an alarm, sends commands to the board,
+
+35
+00:02:06,800 --> 00:02:09,310
+and records labelled data for training.
+
+36
+00:02:10,740 --> 00:02:11,640
+To sum up.
+
+37
+00:02:11,680 --> 00:02:14,240
+An ordinary gas alarm cannot tell a leak from cooking,
+
+38
+00:02:14,280 --> 00:02:17,610
+so it is either annoying or switched off.
+
+39
+00:02:17,880 --> 00:02:20,280
+By reading three gas sensors and humidity together,
+
+40
+00:02:20,320 --> 00:02:23,920
+and running a small decision tree on the microcontroller itself,
+
+41
+00:02:23,960 --> 00:02:26,760
+this detector stayed quiet through smoke and steam,
+
+42
+00:02:26,800 --> 00:02:29,810
+and raised the alarm within seconds of real LPG.
+
+43
+00:02:30,280 --> 00:02:33,850
+We chose a decision tree because it is the right size for this chip.
+
+44
+00:02:34,120 --> 00:02:37,130
+A depth-five tree is at most thirty-one comparisons,
+
+45
+00:02:37,480 --> 00:02:40,740
+so it needs no neural network library, runs in microseconds,
+
+46
+00:02:40,780 --> 00:02:43,830
+and takes only a few hundred bytes of flash.
+
+47
+00:02:44,420 --> 00:02:48,490
+It is also explainable: every branch is a plain rule you can read,
+
+48
+00:02:48,720 --> 00:02:53,490
+for example that LPG pulls MQ-6 down much harder than MQ-135,
+
+49
+00:02:54,660 --> 00:02:56,730
+while smoke hits MQ-2 first.
+
+50
+00:02:57,040 --> 00:03:00,220
+The tree is trained on a laptop with scikit-learn from our own recordings,
+
+51
+00:03:00,260 --> 00:03:01,460
+exported as C code,
+
+52
+00:03:01,500 --> 00:03:03,600
+and we checked that the C version gives the
+
+53
+00:03:03,640 --> 00:03:06,420
+same answer as the Python model on every sample.
+
+54
+00:03:06,460 --> 00:03:12,440
+The whole system runs on a 16 megahertz core in about nineteen kilobytes of flash,
+
+55
+00:03:12,480 --> 00:03:16,980
+using low-cost, off-the-shelf parts, and the training pipeline is open,
+
+56
+00:03:17,020 --> 00:03:19,570
+so anyone can record their own data and improve the model.
+
+57
+00:03:19,980 --> 00:03:22,740
+The next steps are testing with calibrated gas concentrations,
+
+58
+00:03:22,780 --> 00:03:25,160
+collecting data over more days and more kitchens,
+
+59
+00:03:25,200 --> 00:03:28,070
+and building an enclosure for long-term use.
+
+60
+00:03:28,160 --> 00:03:29,300
+Thank you for watching.
