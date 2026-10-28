@@ -71,7 +71,7 @@ for i in range(rows):
     if i: line(14, y0, 40, y0, 0.8); line(W - 40, y0, W - 14, y0, 0.8)
     text(27, y0 + rh / 2 + 4, "ABCDEF"[i], 10, "middle"); text(W - 27, y0 + rh / 2 + 4, "ABCDEF"[i], 10, "middle")
 text(52, 62, "SMART LPG LEAK DETECTOR", 13, "start", "bold", ls=1)
-text(52, 78, "Wiring schematic, sheet 1 of 1", 10, fill=GREY)
+text(52, 78, "Wiring schematic, sheet 1 of 1. Team 7, 23CSE304 Embedded Systems. Author: Nimal Danyath K (nimaldanyathk)", 10, fill=GREY)
 
 # ---------------- U1 Black Pill ----------------
 MX, MY, MW, MH = 560, 100, 300, 670
@@ -165,16 +165,17 @@ text(930, 955, "Copyright (c) 2026 Nimal Danyath K (nimaldanyathk). All rights r
 # ---------------- title block ----------------
 TX = 940
 line(TX, 876, 1360, 876, 1); line(TX, 904, 1360, 904, 1); line(TX, 932, 1360, 932, 1)
-line(1240, 840, 1240, 960, 1); line(1140, 904, 1140, 932, 1)
+line(1240, 840, 1240, 960, 1); line(1040, 904, 1040, 932, 1)
 text(TX + 12, 865, "SMART LPG LEAK DETECTOR", 17, "start", "bold", ls=1)
 text(1248, 852, "SHEET", 7.5, fill=GREY, ls=1); text(1248, 868, "1 / 1", 12, "start", "bold")
+text(1310, 852, "SIZE", 7.5, fill=GREY, ls=1); text(1310, 868, "A3", 12, "start", "bold")
 text(TX + 12, 886, "TITLE", 7.5, fill=GREY, ls=1); text(TX + 12, 898, "Wiring schematic, STM32F401CCU6 Black Pill", 10.5)
 text(1248, 886, "REV", 7.5, fill=GREY, ls=1); text(1248, 898, "A", 11, "start", "bold")
-text(TX + 12, 914, "DRAWN BY", 7.5, fill=GREY, ls=1); text(TX + 12, 926, "Nimal Danyath K (nimaldanyathk)", 10.5)
-text(1148, 914, "DATE", 7.5, fill=GREY, ls=1); text(1148, 926, "2026-10-15", 10.5)
-text(1248, 914, "DOCUMENT NO", 7.5, fill=GREY, ls=1); text(1248, 926, "LPG-SCH-001", 10.5)
+text(TX + 12, 914, "DRAWN BY", 7.5, fill=GREY, ls=1); text(TX + 12, 926, "Team 7", 10.5, "start", "bold")
+text(1048, 914, "AUTHOR", 7.5, fill=GREY, ls=1); text(1048, 926, "Nimal Danyath K", 10.5)
+text(1248, 914, "DATE", 7.5, fill=GREY, ls=1); text(1248, 926, "2026-10-15", 10.5)
 text(TX + 12, 942, "PROJECT", 7.5, fill=GREY, ls=1); text(TX + 12, 954, "23CSE304 Embedded Systems, Amrita Vishwa Vidyapeetham", 9.5)
-text(1248, 942, "SIZE", 7.5, fill=GREY, ls=1); text(1248, 954, "A3", 10.5)
+text(1248, 942, "DOCUMENT NO", 7.5, fill=GREY, ls=1); text(1248, 954, "LPG-SCH-001", 10.5)
 
 svg = (f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {W} {H}' width='{W}' height='{H}' font-family=\"{FONT}\" role='img' aria-labelledby='t'>\n"
        "<title id='t'>Smart LPG leak detector, wiring schematic, STM32F401CCU6 Black Pill</title>\n"
