@@ -3,7 +3,7 @@
 Smart LPG Leak Detector on STM32, 23CSE304 Embedded Systems case study.
 Author: Nimal Danyath K (nimaldanyathk).
 
-The finished video is at https://www.youtube.com/watch?v=l1xW6BVHG_4 (3 minutes 35 seconds). The script below is the plan it was recorded from; the as-narrated text is in lpg_detector_demo_team7.srt.
+The finished video is at https://www.youtube.com/watch?v=l1xW6BVHG_4 (3 minutes 35 seconds). The script below is the plan it was recorded from. The as-narrated text is in lpg_detector_demo_team7.srt; the bracketed numbers below were not read out in the final narration.
 
 Target length: about 5 minutes at a calm 150 words per minute (about 4 minutes 45 without the optional LPG with steam scene). Read a little faster, or cut the LPG with steam scene and shorten scene 2, to land under 4 minutes. Landscape 1080p. Record all the video first, record the voice-over separately in a quiet room, then put them together in the edit.
 
