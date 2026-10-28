@@ -7,6 +7,8 @@ Author: Nimal Danyath K ([@nimaldanyathk](https://github.com/nimaldanyathk))
 
 Phone app: https://nimaldanyathk.github.io/stm32-lpg-leak-detector/phone_app/gas_monitor.html (open in Chrome on Android, or Chrome / Edge on a laptop)
 
+Demo video: https://www.youtube.com/watch?v=l1xW6BVHG_4
+
 ![OLED screens](docs/images/oled_screens.png)
 
 ---
@@ -185,6 +187,7 @@ bringup_tests/
   blink_button.c      LED and button only, no external parts
 docs/images/          screenshots
 docs/schematic/       wiring schematic (SVG) and its generator
+docs/submission/      one-page write-up, links, demo video and subtitles
 ```
 
 ---

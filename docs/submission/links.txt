@@ -15,7 +15,7 @@ One-page write-up
   https://github.com/nimaldanyathk/stm32-lpg-leak-detector/blob/main/docs/submission/Team_07_writeup.pdf
 
 Demo video (voice-over, subtitles)
-  YouTube: <paste the YouTube link here after uploading>
+  YouTube: https://www.youtube.com/watch?v=l1xW6BVHG_4
   Repository copy (compressed, 1080p): https://github.com/nimaldanyathk/stm32-lpg-leak-detector/blob/main/docs/submission/lpg_detector_demo_team7.mp4
   Full-quality file (185 MB): lpg_detector_demo_team7.mp4 in the lpg-detector folder on the Ultra Touch drive
 
